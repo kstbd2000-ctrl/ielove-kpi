@@ -126,7 +126,7 @@ function ContractModal({followCase, onConfirm, onCancel}){
 }
 
 // ── 追客中カード ────────────────────────────────────
-function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange}){
+function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onDelete}){
   const tc=TC[c.tier]||{bg:"#f1f5f9",text:"#475569",border:"#cbd5e1"};
   const tyc=TYPC[c.type]||"#64748b";
   const sys=[c.s1,c.s2].filter(Boolean);
@@ -156,9 +156,12 @@ function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange}){
         <div style={{borderTop:"1px solid #f1f5f9",padding:"12px 14px",background:"#fafafa"}}>
           {c.notes&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>📝 履歴メモ</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap",lineHeight:1.65,background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #e2e8f0"}}>{c.notes}</div></div>}
           {c.contact&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>👤 担当者情報</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap"}}>{c.contact}</div></div>}
-          <button onClick={onAI} disabled={aiLoad} style={{padding:"5px 12px",background:aiLoad?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#a78bfa)",color:aiLoad?"#94a3b8":"white",border:"none",borderRadius:6,cursor:aiLoad?"not-allowed":"pointer",fontSize:11,fontWeight:600}}>
-            {aiLoad?"⏳ 生成中...":"✨ AIネクストアクション提案"}
-          </button>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={onAI} disabled={aiLoad} style={{padding:"5px 12px",background:aiLoad?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#a78bfa)",color:aiLoad?"#94a3b8":"white",border:"none",borderRadius:6,cursor:aiLoad?"not-allowed":"pointer",fontSize:11,fontWeight:600}}>
+              {aiLoad?"⏳ 生成中...":"✨ AIネクストアクション提案"}
+            </button>
+            <button onClick={()=>{if(window.confirm(`「${c.co}」を削除しますか？`))onDelete(c.id);}} style={{padding:"5px 12px",background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>🗑 削除</button>
+          </div>
           {aiRes&&<div style={{marginTop:8,background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:6,padding:"8px 12px",fontSize:12,color:"#5b21b6",lineHeight:1.6}}><span style={{fontWeight:700,fontSize:10,color:"#7c3aed"}}>🤖 AI提案：</span><br/>{aiRes}</div>}
         </div>
       )}
@@ -272,7 +275,7 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange}/>)}
+        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange} onDelete={id=>setFollowCases(p=>p.filter(c=>c.id!==id))}/>)}
         {shown.length===0&&<div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13}}>該当案件なし</div>}
       </div>
     </div>
@@ -329,7 +332,7 @@ function MonthlyTab(){
   const del=(id)=>setCases(p=>p.filter(c=>c.id!==id));
   const inp=(k,ph)=><input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>;
   const slc=(k,opts)=><select value={form[k]} onChange={e=>f(k,e.target.value)} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,background:"white",width:"100%"}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>;
-  const tiers=["契約","A","B","C","D"];
+  const tiers=["契約","A","B","C","D","失注"];
   return(
     <div>
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
