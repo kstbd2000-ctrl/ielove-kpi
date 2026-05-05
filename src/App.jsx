@@ -451,19 +451,19 @@ function ClientsTab({clients}){
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>契約社数</div>
-          <div style={{fontSize:28,fontWeight:700}}>{filtered.length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
+          <div style={{fontSize:22,fontWeight:700}}>{filtered.length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#0369a1,#38bdf8)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>月額合計</div>
-          <div style={{fontSize:28,fontWeight:700}}>{totalMonthly.toFixed(2)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
+          <div style={{fontSize:22,fontWeight:700}}>{totalMonthly.toFixed(2)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#b45309,#fcd34d)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>初期費用合計</div>
-          <div style={{fontSize:28,fontWeight:700}}>{totalInitial.toFixed(1)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
+          <div style={{fontSize:22,fontWeight:700}}>{totalInitial.toFixed(1)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#166534,#4ade80)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>補助金あり</div>
-          <div style={{fontSize:28,fontWeight:700}}>{filtered.filter(c=>c.hojokin).length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
+          <div style={{fontSize:22,fontWeight:700}}>{filtered.filter(c=>c.hojokin).length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
         </div>
       </div>
 
