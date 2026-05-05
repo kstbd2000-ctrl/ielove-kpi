@@ -126,7 +126,7 @@ function ContractModal({followCase, onConfirm, onCancel}){
 }
 
 // ── 追客中カード ────────────────────────────────────
-function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onDelete}){
+function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onDelete, onEdit}){
   const tc=TC[c.tier]||{bg:"#f1f5f9",text:"#475569",border:"#cbd5e1"};
   const tyc=TYPC[c.type]||"#64748b";
   const sys=[c.s1,c.s2].filter(Boolean);
@@ -156,7 +156,8 @@ function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onD
         <div style={{borderTop:"1px solid #f1f5f9",padding:"12px 14px",background:"#fafafa"}}>
           {c.notes&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>📝 履歴メモ</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap",lineHeight:1.65,background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #e2e8f0"}}>{c.notes}</div></div>}
           {c.contact&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>👤 担当者情報</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap"}}>{c.contact}</div></div>}
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>onEdit(c)} style={{padding:"5px 12px",background:"#dbeafe",color:"#1d4ed8",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>✏️ 編集</button>
             <button onClick={onAI} disabled={aiLoad} style={{padding:"5px 12px",background:aiLoad?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#a78bfa)",color:aiLoad?"#94a3b8":"white",border:"none",borderRadius:6,cursor:aiLoad?"not-allowed":"pointer",fontSize:11,fontWeight:600}}>
               {aiLoad?"⏳ 生成中...":"✨ AIネクストアクション提案"}
             </button>
@@ -177,15 +178,32 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
   const [aiRes,setAiRes]=useState({});
   const [contractTarget,setContractTarget]=useState(null);
   const [showAddForm,setShowAddForm]=useState(false);
+  const [editFollowId,setEditFollowId]=useState(null);
   const [addForm,setAddForm]=useState(BLANK_FOLLOW);
   const af=(k,v)=>setAddForm(p=>({...p,[k]:v}));
   const ainp=(k,ph)=><input value={addForm[k]} onChange={e=>af(k,e.target.value)} placeholder={ph} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>;
   const aslc=(k,opts)=><select value={addForm[k]} onChange={e=>af(k,e.target.value)} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,background:"white",width:"100%"}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>;
   const saveFollow=()=>{
     if(!addForm.co.trim())return;
-    setFollowCases(p=>[{...addForm,id:Date.now()},...p]);
+    if(editFollowId!==null){
+      setFollowCases(p=>p.map(c=>c.id===editFollowId?{...addForm,id:editFollowId}:c));
+    }else{
+      setFollowCases(p=>[{...addForm,id:Date.now()},...p]);
+    }
     setAddForm(BLANK_FOLLOW);
     setShowAddForm(false);
+    setEditFollowId(null);
+  };
+  const startFollowEdit=(c)=>{
+    setAddForm({tier:c.tier,co:c.co,s1:c.s1||"",s2:c.s2||"",loc:c.loc||"",ph:c.ph||"",type:c.type,notes:c.notes||"",contact:c.contact||"",next:c.next||""});
+    setEditFollowId(c.id);
+    setShowAddForm(true);
+    if(typeof window!=="undefined") window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const cancelFollowForm=()=>{
+    setShowAddForm(false);
+    setAddForm(BLANK_FOLLOW);
+    setEditFollowId(null);
   };
 
   const cnt=TIERS_FOLLOW.reduce((a,t)=>({...a,[t]:followCases.filter(c=>c.tier===t).length}),{});
@@ -240,13 +258,13 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
       </div>
 
       <div style={{marginBottom:14}}>
-        <button onClick={()=>{setShowAddForm(s=>!s);setAddForm(BLANK_FOLLOW);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+        <button onClick={()=>{ if(showAddForm){cancelFollowForm();}else{setEditFollowId(null);setAddForm(BLANK_FOLLOW);setShowAddForm(true);} }} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
           {showAddForm?"✕ 閉じる":"＋ 追客案件を追加"}
         </button>
       </div>
       {showAddForm&&(
         <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:16,marginBottom:16}}>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>➕ 新規追客案件</div>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>{editFollowId!==null?"✏️ 追客案件を編集":"➕ 新規追客案件"}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:10}}>
             <div><div style={lbl}>Tier</div>{aslc("tier",["失注","A","B","C","D"])}</div>
             <div><div style={lbl}>種別</div>{aslc("type",["賃貸仲介","売買仲介","賃貸管理","総合不動産"])}</div>
@@ -260,8 +278,8 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
           <div style={{marginBottom:10}}><div style={lbl}>担当者情報</div><textarea value={addForm.contact} onChange={e=>af("contact",e.target.value)} placeholder="例: 田中社長 080-0000-0000" rows={2} style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,resize:"vertical",boxSizing:"border-box"}}/></div>
           <div style={{marginBottom:14}}><div style={lbl}>履歴メモ</div><textarea value={addForm.notes} onChange={e=>af("notes",e.target.value)} placeholder="商談メモ・状況など" rows={3} style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,resize:"vertical",boxSizing:"border-box"}}/></div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={saveFollow} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>✅ 追加</button>
-            <button onClick={()=>{setShowAddForm(false);setAddForm(BLANK_FOLLOW);}} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
+            <button onClick={saveFollow} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>{editFollowId!==null?"💾 更新":"✅ 追加"}</button>
+            <button onClick={cancelFollowForm} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
           </div>
         </div>
       )}
@@ -275,7 +293,7 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange} onDelete={id=>setFollowCases(p=>p.filter(c=>c.id!==id))}/>)}
+        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange} onDelete={id=>setFollowCases(p=>p.filter(c=>c.id!==id))} onEdit={startFollowEdit}/>)}
         {shown.length===0&&<div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13}}>該当案件なし</div>}
       </div>
     </div>
@@ -306,13 +324,7 @@ function KpiCard({label,unit,act,tgt}){
 }
 
 // ── 月次案件タブ ───────────────────────────────────
-function MonthlyTab(){
-  const [cases,setCases]=useState(()=>{
-    const saved = lsGet("monthly_cases");
-    return saved ? JSON.parse(saved) : INIT_MONTHLY;
-  });
-  useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(cases)); },[cases]);
-
+function MonthlyTab({cases, setCases}){
   const [form,setForm]=useState(BLANK_MONTHLY);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
@@ -543,9 +555,14 @@ export default function App(){
     const saved = lsGet("clients");
     return saved ? JSON.parse(saved) : INIT_CLIENTS;
   });
+  const [monthlyCases,setMonthlyCases]=useState(()=>{
+    const saved = lsGet("monthly_cases");
+    return saved ? JSON.parse(saved) : INIT_MONTHLY;
+  });
 
   useEffect(()=>{ lsSet("follow_cases", JSON.stringify(followCases)); },[followCases]);
   useEffect(()=>{ lsSet("clients", JSON.stringify(clients)); },[clients]);
+  useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(monthlyCases)); },[monthlyCases]);
 
   const tabs=[
     {k:"followup", icon:"📋", l:"追客中"},
@@ -566,7 +583,7 @@ export default function App(){
       </div>
       <div className="content-area">
         {tab==="followup"&&<FollowupTab followCases={followCases} setFollowCases={setFollowCases} clients={clients} setClients={setClients}/>}
-        {tab==="monthly"&&<MonthlyTab/>}
+        {tab==="monthly"&&<MonthlyTab cases={monthlyCases} setCases={setMonthlyCases}/>}
         {tab==="clients"&&<ClientsTab clients={clients}/>}
       </div>
       <nav className="bottom-nav">
