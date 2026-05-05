@@ -565,8 +565,8 @@ export default function App(){
   useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(monthlyCases)); },[monthlyCases]);
 
   const tabs=[
-    {k:"followup", icon:"📋", l:"追客中"},
     {k:"clients",  icon:"🏆", l:"契約"},
+    {k:"followup", icon:"📋", l:"追客中"},
     {k:"monthly",  icon:"📈", l:"月次KPI"},
   ];
   return(
