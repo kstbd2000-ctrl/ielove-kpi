@@ -65,6 +65,8 @@ const INIT_MONTHLY = [
   {id:203,date:"",tanto:"武",vtype:"V",asp:"",shogu:"",tsukin:"",co:"広田ユニオン",tier:"C",na:"",hojokin:false},
 ];
 const BLANK_FOLLOW = {tier:"D",co:"",s1:"",s2:"",loc:"",ph:"",type:"賃貸仲介",notes:"",contact:"",next:""};
+const BLANK_APO = {date:"",count:""};
+const INIT_KPI_TARGETS = {keiyaku:5, apo:20, shogu:200, tsukin:30};
 const lbl = {fontSize:10,color:"#64748b",marginBottom:3,fontWeight:600};
 const today = new Date().toISOString().slice(0,10).replace(/-/g,"/");
 
@@ -301,19 +303,34 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
 }
 
 // ── KPIカード ──────────────────────────────────────
-function KpiCard({label,unit,act,tgt}){
-  const noTarget=!tgt;
+function KpiCard({label,unit,act,tgt,onEditTgt}){
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState("");
+  const noTarget=tgt==null;
   const pct=noTarget?0:Math.min((act/tgt)*100,100);
   const col=noTarget?"#94a3b8":pct<20?"#ef4444":pct<50?"#f97316":"#22c55e";
+  const startEdit=()=>{setDraft(String(tgt??""));setEditing(true);};
+  const commit=()=>{
+    const v=parseFloat(draft);
+    if(!isNaN(v)&&v>0&&onEditTgt)onEditTgt(v);
+    setEditing(false);
+  };
   return(
     <div style={{background:"white",borderRadius:10,padding:14,border:"1px solid #e2e8f0",flex:1,minWidth:0}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
-        <span style={{fontWeight:700,fontSize:14}}>{label}</span>
-        <span style={{fontSize:11,color:"#94a3b8"}}>{noTarget?"目標未定":`目標 ${tgt}${unit}`}</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6,gap:6}}>
+        <span style={{fontWeight:700,fontSize:13}}>{label}</span>
+        {editing?(
+          <input autoFocus type="number" value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape")setEditing(false);}}
+            style={{width:60,padding:"2px 4px",fontSize:11,borderRadius:4,border:"1px solid #2563eb"}}/>
+        ):(
+          <span onClick={onEditTgt?startEdit:undefined} style={{fontSize:10,color:"#94a3b8",cursor:onEditTgt?"pointer":"default",whiteSpace:"nowrap"}}>
+            {noTarget?"目標未定":`目標 ${tgt}${unit}`}{onEditTgt&&" ✏️"}
+          </span>
+        )}
       </div>
-      <div style={{fontSize:22,fontWeight:700,marginBottom:4}}>
+      <div style={{fontSize:20,fontWeight:700,marginBottom:4,whiteSpace:"nowrap"}}>
         {typeof act==="number"&&!Number.isInteger(act)?act.toFixed(2):act}{unit}
-        {!noTarget&&<span style={{fontSize:12,color:"#64748b",fontWeight:400,marginLeft:4}}>/ {tgt}{unit}</span>}
+        {!noTarget&&<span style={{fontSize:11,color:"#64748b",fontWeight:400,marginLeft:4}}>/ {tgt}{unit}</span>}
       </div>
       <div style={{background:"#f1f5f9",borderRadius:4,height:7,marginBottom:6}}>
         {!noTarget&&<div style={{background:col,width:`${pct}%`,height:7,borderRadius:4}}/>}
@@ -324,15 +341,22 @@ function KpiCard({label,unit,act,tgt}){
 }
 
 // ── 月次案件タブ ───────────────────────────────────
-function MonthlyTab({cases, setCases}){
+function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTargets}){
   const [form,setForm]=useState(BLANK_MONTHLY);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
-  const KPI={keiyaku:5};
+  const [apoForm,setApoForm]=useState(BLANK_APO);
   const contractCnt=cases.filter(c=>c.tier==="契約").length;
-  const totalAsp=cases.reduce((s,c)=>s+(Number(c.asp)||0),0);
+  const totalApo=apoList.reduce((s,a)=>s+(Number(a.count)||0),0);
   const totalShogu=cases.reduce((s,c)=>s+(Number(c.shogu)||0),0);
   const totalTsukin=cases.reduce((s,c)=>s+(Number(c.tsukin)||0),0);
+  const setTgt=(k,v)=>setKpiTargets(p=>({...p,[k]:v}));
+  const addApo=()=>{
+    if(!apoForm.count)return;
+    setApoList(p=>[{id:Date.now(),date:apoForm.date,count:Number(apoForm.count)},...p]);
+    setApoForm(BLANK_APO);
+  };
+  const delApo=(id)=>setApoList(p=>p.filter(a=>a.id!==id));
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=()=>{
     if(!form.co.trim())return;
@@ -348,11 +372,33 @@ function MonthlyTab({cases, setCases}){
   return(
     <div>
       <div className="kpi-row" style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        <KpiCard label="契約" unit="本" act={contractCnt} tgt={KPI.keiyaku}/>
-        <KpiCard label="ASP合計" unit="" act={totalAsp} tgt={null}/>
-        <KpiCard label="初顧合計" unit="" act={totalShogu} tgt={null}/>
-        <KpiCard label="月顧合計" unit="" act={totalTsukin} tgt={null}/>
+        <KpiCard label="契約" unit="本" act={contractCnt} tgt={kpiTargets.keiyaku} onEditTgt={v=>setTgt("keiyaku",v)}/>
+        <KpiCard label="アポ数" unit="本" act={totalApo} tgt={kpiTargets.apo} onEditTgt={v=>setTgt("apo",v)}/>
+        <KpiCard label="初期合計" unit="万" act={totalShogu} tgt={kpiTargets.shogu} onEditTgt={v=>setTgt("shogu",v)}/>
+        <KpiCard label="月額合計" unit="万" act={totalTsukin} tgt={kpiTargets.tsukin} onEditTgt={v=>setTgt("tsukin",v)}/>
       </div>
+
+      {/* アポイント入力 */}
+      <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"#1e3a8a"}}>📅 アポイント入力</div>
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          <input value={apoForm.date} onChange={e=>setApoForm(p=>({...p,date:e.target.value}))} placeholder="日付（例: 5/7）" style={{flex:"1 1 120px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
+          <input type="number" value={apoForm.count} onChange={e=>setApoForm(p=>({...p,count:e.target.value}))} placeholder="本数" style={{flex:"0 1 90px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
+          <button onClick={addApo} style={{padding:"6px 18px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>追加</button>
+        </div>
+        {apoList.length>0&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+            {apoList.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
+                <span style={{color:"#0369a1",fontWeight:600}}>{a.date||"日付未定"}</span>
+                <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
+                <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div style={{marginBottom:14}}>
         <button onClick={()=>{setShowForm(s=>!s);setEditId(null);setForm(BLANK_MONTHLY);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
           {showForm&&editId===null?"✕ 閉じる":"＋ 案件を追加"}
@@ -559,10 +605,20 @@ export default function App(){
     const saved = lsGet("monthly_cases");
     return saved ? JSON.parse(saved) : INIT_MONTHLY;
   });
+  const [apoList,setApoList]=useState(()=>{
+    const saved = lsGet("apo_list");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [kpiTargets,setKpiTargets]=useState(()=>{
+    const saved = lsGet("kpi_targets");
+    return saved ? {...INIT_KPI_TARGETS, ...JSON.parse(saved)} : INIT_KPI_TARGETS;
+  });
 
   useEffect(()=>{ lsSet("follow_cases", JSON.stringify(followCases)); },[followCases]);
   useEffect(()=>{ lsSet("clients", JSON.stringify(clients)); },[clients]);
   useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(monthlyCases)); },[monthlyCases]);
+  useEffect(()=>{ lsSet("apo_list", JSON.stringify(apoList)); },[apoList]);
+  useEffect(()=>{ lsSet("kpi_targets", JSON.stringify(kpiTargets)); },[kpiTargets]);
 
   const tabs=[
     {k:"clients",  icon:"🏆", l:"契約"},
@@ -583,7 +639,7 @@ export default function App(){
       </div>
       <div className="content-area">
         {tab==="followup"&&<FollowupTab followCases={followCases} setFollowCases={setFollowCases} clients={clients} setClients={setClients}/>}
-        {tab==="monthly"&&<MonthlyTab cases={monthlyCases} setCases={setMonthlyCases}/>}
+        {tab==="monthly"&&<MonthlyTab cases={monthlyCases} setCases={setMonthlyCases} apoList={apoList} setApoList={setApoList} kpiTargets={kpiTargets} setKpiTargets={setKpiTargets}/>}
         {tab==="clients"&&<ClientsTab clients={clients}/>}
       </div>
       <nav className="bottom-nav">
