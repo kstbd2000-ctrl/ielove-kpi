@@ -335,7 +335,7 @@ function MonthlyTab(){
   const tiers=["契約","A","B","C","D","失注"];
   return(
     <div>
-      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+      <div className="kpi-row" style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <KpiCard label="契約" unit="本" act={contractCnt} tgt={KPI.keiyaku}/>
         <KpiCard label="ASP合計" unit="" act={totalAsp} tgt={null}/>
         <KpiCard label="初顧合計" unit="" act={totalShogu} tgt={null}/>
@@ -376,7 +376,7 @@ function MonthlyTab(){
               <span style={{fontSize:12,color:tc.text,fontWeight:600}}>{rows.length}本{aspSum>0?` · ASP ${aspSum}`:""}</span>
             </div>
             {rows.length===0?<div style={{padding:"12px 14px",color:"#94a3b8",fontSize:12}}>案件なし</div>:
-            <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <div className="table-scroll-wrap"><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
               <thead><tr style={{background:"#f8fafc"}}>{["日付","担当","形式","ASP","初期","月額","会社名","ネクストアクション",""].map((h,i)=><th key={i} style={{padding:"5px 10px",textAlign:"left",color:"#64748b",fontWeight:600,borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
               <tbody>{rows.map((c,i)=>(
                 <tr key={c.id} style={{background:i%2===0?"white":"#fafafa"}}>
@@ -547,27 +547,37 @@ export default function App(){
   useEffect(()=>{ lsSet("follow_cases", JSON.stringify(followCases)); },[followCases]);
   useEffect(()=>{ lsSet("clients", JSON.stringify(clients)); },[clients]);
 
-  const tabs=[{k:"clients",l:"🏆 契約クライアント"},{k:"followup",l:"📋 追客中案件"},{k:"monthly",l:"📈 月次案件 & KPI"}];
+  const tabs=[
+    {k:"followup", icon:"📋", l:"追客中"},
+    {k:"clients",  icon:"🏆", l:"契約"},
+    {k:"monthly",  icon:"📈", l:"月次KPI"},
+  ];
   return(
     <div style={{fontFamily:"'Segoe UI',sans-serif",background:"#f1f5f9",minHeight:"100vh"}}>
-      <div style={{background:"linear-gradient(135deg,#1e3a8a,#2563eb)",color:"white",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div className="app-header" style={{background:"linear-gradient(135deg,#1e3a8a,#2563eb)",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontWeight:700,fontSize:16}}>🏢 いえらぶ案件管理</div>
           <div style={{fontSize:11,opacity:.75}}>いえらぶGROUP · 営業1課 · 2026年5月</div>
         </div>
         <div style={{textAlign:"right",fontSize:11,opacity:.8}}>
           <div>追客 {followCases.length}社</div>
-          <div>契約クライアント {clients.length}社</div>
+          <div>契約 {clients.length}社</div>
         </div>
       </div>
-      <div style={{display:"flex",background:"white",borderBottom:"1px solid #e2e8f0",paddingLeft:16,overflowX:"auto"}}>
-        {tabs.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontWeight:tab===t.k?700:400,fontSize:12,color:tab===t.k?"#2563eb":"#64748b",borderBottom:`2px solid ${tab===t.k?"#2563eb":"transparent"}`,marginBottom:-1,whiteSpace:"nowrap"}}>{t.l}</button>)}
-      </div>
-      <div style={{padding:14,maxWidth:1100,margin:"0 auto"}}>
+      <div className="content-area">
         {tab==="followup"&&<FollowupTab followCases={followCases} setFollowCases={setFollowCases} clients={clients} setClients={setClients}/>}
         {tab==="monthly"&&<MonthlyTab/>}
         {tab==="clients"&&<ClientsTab clients={clients}/>}
       </div>
+      <nav className="bottom-nav">
+        {tabs.map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)}>
+            <span className="nav-icon">{t.icon}</span>
+            <span className="nav-label" style={{color:tab===t.k?"#2563eb":"#94a3b8",fontWeight:tab===t.k?700:400}}>{t.l}</span>
+            {tab===t.k&&<span style={{width:20,height:2,background:"#2563eb",borderRadius:1}}/>}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
