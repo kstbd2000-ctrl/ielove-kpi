@@ -357,10 +357,12 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
   const totalShogu=cases.reduce((s,c)=>s+(Number(c.shogu)||0),0);
   const totalTsukin=cases.reduce((s,c)=>s+(Number(c.tsukin)||0),0);
   const setTgt=(k,v)=>setKpiTargets(p=>({...p,[k]:v}));
+  const [showApoForm,setShowApoForm]=useState(false);
   const addApo=()=>{
     if(!apoForm.count)return;
-    setApoList(p=>[{id:Date.now(),date:apoForm.date,count:Number(apoForm.count)},...p]);
+    setApoList(p=>[{id:Date.now(),date:apoForm.date,count:Number(apoForm.count),apoType:apoForm.apoType},...p]);
     setApoForm(BLANK_APO);
+    setShowApoForm(false);
   };
   const delApo=(id)=>setApoList(p=>p.filter(a=>a.id!==id));
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
@@ -385,36 +387,58 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
       </div>
 
       {/* アポイント入力 */}
-      <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
-        <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"#1e3a8a"}}>📅 アポイント入力</div>
-        <div style={{display:"flex",gap:6,marginBottom:10}}>
-          {["賃貸","売買","その他"].map(t=>{
-            const active=apoForm.apoType===t;
-            const col=APO_TYPE_COL[t];
-            return <button key={t} onClick={()=>setApoForm(p=>({...p,apoType:t}))} style={{flex:1,padding:"6px 0",borderRadius:8,border:`2px solid ${active?col:"#e2e8f0"}`,background:active?col:"white",color:active?"white":"#64748b",fontWeight:active?700:400,fontSize:13,cursor:"pointer"}}>{t}</button>;
-          })}
+      <div style={{marginBottom:14}}>
+        <button onClick={()=>{setShowApoForm(s=>!s);setApoForm(BLANK_APO);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#0369a1,#0ea5e9)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+          {showApoForm?"✕ 閉じる":"＋ アポを追加"}
+        </button>
+      </div>
+      {showApoForm&&(
+        <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:16,marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>📅 アポイント入力</div>
+          <div style={{marginBottom:10}}>
+            <div style={lbl}>種別</div>
+            <div style={{display:"flex",gap:6}}>
+              {["賃貸","売買","その他"].map(t=>{
+                const active=apoForm.apoType===t;
+                const col=APO_TYPE_COL[t];
+                return <button key={t} onClick={()=>setApoForm(p=>({...p,apoType:t}))} style={{flex:1,padding:"7px 0",borderRadius:8,border:`2px solid ${active?col:"#e2e8f0"}`,background:active?col:"white",color:active?"white":"#64748b",fontWeight:active?700:400,fontSize:13,cursor:"pointer"}}>{t}</button>;
+              })}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div>
+              <div style={lbl}>日付</div>
+              <input value={apoForm.date} onChange={e=>setApoForm(p=>({...p,date:e.target.value}))} placeholder="例: 5/7" style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <div style={lbl}>本数</div>
+              <input type="number" value={apoForm.count} onChange={e=>setApoForm(p=>({...p,count:e.target.value}))} placeholder="例: 3" style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={addApo} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>✅ 追加</button>
+            <button onClick={()=>{setShowApoForm(false);setApoForm(BLANK_APO);}} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
+          </div>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-          <input value={apoForm.date} onChange={e=>setApoForm(p=>({...p,date:e.target.value}))} placeholder="日付（例: 5/7）" style={{flex:"1 1 120px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
-          <input type="number" value={apoForm.count} onChange={e=>setApoForm(p=>({...p,count:e.target.value}))} placeholder="本数" style={{flex:"0 1 90px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
-          <button onClick={addApo} style={{padding:"6px 18px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>追加</button>
-        </div>
-        {apoList.length>0&&(
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+      )}
+      {apoList.length>0&&(
+        <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:12,color:"#475569",marginBottom:8}}>📋 入力済みアポ（計 {totalApo}本）</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {apoList.map(a=>{
               const col=APO_TYPE_COL[a.apoType||"その他"];
               return(
                 <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:`${col}15`,border:`1px solid ${col}60`,borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
                   <span style={{color:col,fontWeight:700,fontSize:10}}>{a.apoType||"?"}</span>
-                  <span style={{color:"#0369a1",fontWeight:600}}>{a.date||"日付未定"}</span>
+                  <span style={{color:"#334155",fontWeight:600}}>{a.date||"日付未定"}</span>
                   <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
                   <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div style={{marginBottom:14}}>
         <button onClick={()=>{setShowForm(s=>!s);setEditId(null);setForm(BLANK_MONTHLY);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
