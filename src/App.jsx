@@ -429,7 +429,7 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
               const col=APO_TYPE_COL[a.apoType||"その他"];
               return(
                 <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:`${col}15`,border:`1px solid ${col}60`,borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
-                  <span style={{color:col,fontWeight:700,fontSize:10}}>{a.apoType||"?"}</span>
+                  <span style={{color:col,fontWeight:700,fontSize:10}}>{a.apoType||"その他"}</span>
                   <span style={{color:"#334155",fontWeight:600}}>{a.date||"日付未定"}</span>
                   <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
                   <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
