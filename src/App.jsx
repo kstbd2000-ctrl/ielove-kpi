@@ -70,7 +70,8 @@ const INIT_MONTHLY = [
   {id:203,date:"",tanto:"武",vtype:"V",asp:"",shogu:"",tsukin:"",co:"広田ユニオン",tier:"C",na:"",hojokin:false},
 ];
 const BLANK_FOLLOW = {tier:"D",co:"",s1:"",s2:"",loc:"",ph:"",type:"賃貸仲介",notes:"",contact:"",next:""};
-const BLANK_APO = {date:"",count:""};
+const BLANK_APO = {date:"",count:"",apoType:"賃貸"};
+const APO_TYPE_COL = {"賃貸":"#0ea5e9","売買":"#f97316","その他":"#94a3b8"};
 const INIT_KPI_TARGETS = {keiyaku:5, apo:20, shogu:200, tsukin:30};
 const lbl = {fontSize:10,color:"#64748b",marginBottom:3,fontWeight:600};
 const today = new Date().toISOString().slice(0,10).replace(/-/g,"/");
@@ -386,6 +387,13 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
       {/* アポイント入力 */}
       <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"#1e3a8a"}}>📅 アポイント入力</div>
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          {["賃貸","売買","その他"].map(t=>{
+            const active=apoForm.apoType===t;
+            const col=APO_TYPE_COL[t];
+            return <button key={t} onClick={()=>setApoForm(p=>({...p,apoType:t}))} style={{flex:1,padding:"6px 0",borderRadius:8,border:`2px solid ${active?col:"#e2e8f0"}`,background:active?col:"white",color:active?"white":"#64748b",fontWeight:active?700:400,fontSize:13,cursor:"pointer"}}>{t}</button>;
+          })}
+        </div>
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
           <input value={apoForm.date} onChange={e=>setApoForm(p=>({...p,date:e.target.value}))} placeholder="日付（例: 5/7）" style={{flex:"1 1 120px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
           <input type="number" value={apoForm.count} onChange={e=>setApoForm(p=>({...p,count:e.target.value}))} placeholder="本数" style={{flex:"0 1 90px",padding:"6px 10px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:13}}/>
@@ -393,13 +401,17 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
         </div>
         {apoList.length>0&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-            {apoList.map(a=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
-                <span style={{color:"#0369a1",fontWeight:600}}>{a.date||"日付未定"}</span>
-                <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
-                <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-              </div>
-            ))}
+            {apoList.map(a=>{
+              const col=APO_TYPE_COL[a.apoType||"その他"];
+              return(
+                <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:`${col}15`,border:`1px solid ${col}60`,borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
+                  <span style={{color:col,fontWeight:700,fontSize:10}}>{a.apoType||"?"}</span>
+                  <span style={{color:"#0369a1",fontWeight:600}}>{a.date||"日付未定"}</span>
+                  <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
+                  <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -492,6 +504,16 @@ function AnalyticsTab({clients, apoList}){
     return Object.values(m).map(v=>({...v, 月額:Number(v.月額.toFixed(2)), 初期:Number(v.初期.toFixed(1))}));
   },[clients]);
 
+  // アポ種別内訳
+  const apoTypeData = useMemo(()=>{
+    const m = {};
+    apoList.forEach(a=>{
+      const t = a.apoType||"その他";
+      m[t] = (m[t]||0) + (Number(a.count)||0);
+    });
+    return Object.entries(m).map(([name,value])=>({name,value,color:APO_TYPE_COL[name]||"#94a3b8"})).sort((a,b)=>b.value-a.value);
+  },[apoList]);
+
   // 週別アポ数推移
   const weeklyApo = useMemo(()=>{
     const yr = new Date().getFullYear();
@@ -567,6 +589,20 @@ function AnalyticsTab({clients, apoList}){
               <Bar dataKey="月額" fill="#3b82f6" radius={[4,4,0,0]}/>
               <Bar dataKey="初期" fill="#f59e0b" radius={[4,4,0,0]}/>
             </BarChart>
+          </ResponsiveContainer>
+        )}
+      </Section>
+
+      <Section title="🏠 アポイント 種別内訳">
+        {apoTypeData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={apoTypeData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={35} outerRadius={60}>
+                {apoTypeData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}本`,"本数"]}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}本`}/>
+            </PieChart>
           </ResponsiveContainer>
         )}
       </Section>
