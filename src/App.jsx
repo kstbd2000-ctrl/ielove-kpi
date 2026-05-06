@@ -528,12 +528,13 @@ function AnalyticsTab({clients, apoList}){
     <div>
       <Section title="📊 契約クライアント 業種別内訳">
         {gyoshuData.length===0?<Empty/>:(
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={170}>
             <PieChart>
-              <Pie data={gyoshuData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({name,value,percent})=>`${name} ${value}社 (${(percent*100).toFixed(0)}%)`} labelLine={false} fontSize={11}>
+              <Pie data={gyoshuData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55}>
                 {gyoshuData.map((d,i)=><Cell key={i} fill={d.color}/>)}
               </Pie>
-              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}社`,"件数"]}/>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v,name)=>[`${v}社`,"件数"]} labelFormatter={name=>`${name}`}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}社`}/>
             </PieChart>
           </ResponsiveContainer>
         )}
@@ -541,13 +542,13 @@ function AnalyticsTab({clients, apoList}){
 
       <Section title="📡 1次接触経路別内訳">
         {contactData.length===0?<Empty/>:(
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={180}>
             <PieChart>
-              <Pie data={contactData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={75} label={({name,value})=>`${name} ${value}`} labelLine={false} fontSize={11}>
+              <Pie data={contactData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={35} outerRadius={60}>
                 {contactData.map((d,i)=><Cell key={i} fill={d.color}/>)}
               </Pie>
               <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}社`,"件数"]}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}社`}/>
             </PieChart>
           </ResponsiveContainer>
         )}
