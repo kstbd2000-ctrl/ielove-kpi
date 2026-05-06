@@ -460,6 +460,127 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
   );
 }
 
+// ── 分析タブ ───────────────────────────────────────
+function AnalyticsTab({clients, apoList}){
+  // 業種別内訳
+  const gyoshuStats = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{ m[c.gyoshu] = (m[c.gyoshu]||0)+1; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  },[clients]);
+
+  // 1次接触経路別内訳
+  const contactStats = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{ m[c.contact1] = (m[c.contact1]||0)+1; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  },[clients]);
+
+  // 業種 × 月額合計
+  const gyoshuMonthly = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{ m[c.gyoshu] = (m[c.gyoshu]||0)+c.monthly; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  },[clients]);
+
+  // 週別アポ数推移
+  const weeklyApo = useMemo(()=>{
+    const yr = new Date().getFullYear();
+    const buckets = {};
+    apoList.forEach(a=>{
+      if(!a.date) return;
+      const m = String(a.date).match(/(\d{1,2})\D+(\d{1,2})/);
+      if(!m) return;
+      const d = new Date(yr, Number(m[1])-1, Number(m[2]));
+      if(isNaN(d)) return;
+      // 週の月曜日にスナップ
+      const dow = d.getDay(); // 0=Sun
+      const offset = dow===0?-6:1-dow;
+      const monday = new Date(d);
+      monday.setDate(d.getDate()+offset);
+      const key = `${monday.getMonth()+1}/${monday.getDate()}`;
+      const sortKey = monday.getTime();
+      if(!buckets[key]) buckets[key] = {label:key, count:0, sortKey};
+      buckets[key].count += Number(a.count)||0;
+    });
+    return Object.values(buckets).sort((a,b)=>a.sortKey-b.sortKey);
+  },[apoList]);
+
+  const totalClients = clients.length;
+  const maxWeekly = Math.max(1, ...weeklyApo.map(w=>w.count));
+
+  const Section = ({title, children}) => (
+    <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const HBar = ({label, value, max, color, suffix})=>{
+    const pct = max>0?(value/max)*100:0;
+    return(
+      <div style={{marginBottom:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+          <span style={{fontWeight:600,color:"#334155"}}>{label}</span>
+          <span style={{fontWeight:700,color}}>{value}{suffix}</span>
+        </div>
+        <div style={{background:"#f1f5f9",borderRadius:4,height:10,overflow:"hidden"}}>
+          <div style={{background:color,width:`${pct}%`,height:10,borderRadius:4,transition:"width .3s"}}/>
+        </div>
+      </div>
+    );
+  };
+
+  return(
+    <div>
+      <Section title="📊 契約クライアント 業種別内訳">
+        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:
+          gyoshuStats.map(([k,v])=>(
+            <HBar key={k} label={k} value={v} max={totalClients} color={GYOSHU_COL[k]||"#64748b"} suffix={`社 (${((v/totalClients)*100).toFixed(0)}%)`}/>
+          ))
+        }
+      </Section>
+
+      <Section title="📡 1次接触経路別内訳">
+        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:
+          contactStats.map(([k,v])=>(
+            <HBar key={k} label={k} value={v} max={totalClients} color={CONTACT_COL[k]||"#94a3b8"} suffix={`社 (${((v/totalClients)*100).toFixed(0)}%)`}/>
+          ))
+        }
+      </Section>
+
+      <Section title="💰 業種別 月額合計">
+        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:(()=>{
+          const max = Math.max(...gyoshuMonthly.map(([,v])=>v));
+          return gyoshuMonthly.map(([k,v])=>(
+            <HBar key={k} label={k} value={v.toFixed(1)} max={max} color={GYOSHU_COL[k]||"#64748b"} suffix="万"/>
+          ));
+        })()}
+      </Section>
+
+      <Section title="📅 週別アポ数 推移">
+        {weeklyApo.length===0?<div style={{color:"#94a3b8",fontSize:12}}>アポデータなし。月次KPIタブで入力してください。</div>:(
+          <div style={{display:"flex",alignItems:"flex-end",gap:8,height:160,padding:"0 4px",borderBottom:"1px solid #e2e8f0",overflowX:"auto"}}>
+            {weeklyApo.map(w=>{
+              const h = (w.count/maxWeekly)*130;
+              return(
+                <div key={w.label} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:42,flex:"0 0 auto"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#1e3a8a"}}>{w.count}</div>
+                  <div style={{width:28,height:h,background:"linear-gradient(180deg,#3b82f6,#1e3a8a)",borderRadius:"4px 4px 0 0"}}/>
+                  <div style={{fontSize:10,color:"#64748b",whiteSpace:"nowrap"}}>{w.label}〜</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {weeklyApo.length>0&&(
+          <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>※ 月曜始まりで集計</div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 // ── 契約クライアントタブ ───────────────────────────
 function MiniBar({val,max,color}){
   const w=max>0?(val/max)*100:0;
@@ -624,6 +745,7 @@ export default function App(){
     {k:"clients",  icon:"🏆", l:"契約"},
     {k:"followup", icon:"📋", l:"追客中"},
     {k:"monthly",  icon:"📈", l:"月次KPI"},
+    {k:"analytics",icon:"📊", l:"分析"},
   ];
   return(
     <div style={{fontFamily:"'Segoe UI',sans-serif",background:"#f1f5f9",minHeight:"100vh"}}>
@@ -641,6 +763,7 @@ export default function App(){
         {tab==="followup"&&<FollowupTab followCases={followCases} setFollowCases={setFollowCases} clients={clients} setClients={setClients}/>}
         {tab==="monthly"&&<MonthlyTab cases={monthlyCases} setCases={setMonthlyCases} apoList={apoList} setApoList={setApoList} kpiTargets={kpiTargets} setKpiTargets={setKpiTargets}/>}
         {tab==="clients"&&<ClientsTab clients={clients}/>}
+        {tab==="analytics"&&<AnalyticsTab clients={clients} apoList={apoList}/>}
       </div>
       <nav className="bottom-nav">
         {tabs.map(t=>(
