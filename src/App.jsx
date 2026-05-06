@@ -1,4 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
+} from "recharts";
 
 const TC = {
   "失注": { bg:"#fee2e2", text:"#dc2626", border:"#fca5a5" },
@@ -463,24 +467,28 @@ function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTar
 // ── 分析タブ ───────────────────────────────────────
 function AnalyticsTab({clients, apoList}){
   // 業種別内訳
-  const gyoshuStats = useMemo(()=>{
+  const gyoshuData = useMemo(()=>{
     const m = {};
     clients.forEach(c=>{ m[c.gyoshu] = (m[c.gyoshu]||0)+1; });
-    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+    return Object.entries(m).map(([name,value])=>({name,value,color:GYOSHU_COL[name]||"#64748b"})).sort((a,b)=>b.value-a.value);
   },[clients]);
 
   // 1次接触経路別内訳
-  const contactStats = useMemo(()=>{
+  const contactData = useMemo(()=>{
     const m = {};
     clients.forEach(c=>{ m[c.contact1] = (m[c.contact1]||0)+1; });
-    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+    return Object.entries(m).map(([name,value])=>({name,value,color:CONTACT_COL[name]||"#94a3b8"})).sort((a,b)=>b.value-a.value);
   },[clients]);
 
-  // 業種 × 月額合計
-  const gyoshuMonthly = useMemo(()=>{
+  // 業種 × 月額合計・初期合計
+  const gyoshuRevenue = useMemo(()=>{
     const m = {};
-    clients.forEach(c=>{ m[c.gyoshu] = (m[c.gyoshu]||0)+c.monthly; });
-    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+    clients.forEach(c=>{
+      if(!m[c.gyoshu]) m[c.gyoshu] = {name:c.gyoshu, 月額:0, 初期:0, color:GYOSHU_COL[c.gyoshu]||"#64748b"};
+      m[c.gyoshu].月額 += c.monthly;
+      m[c.gyoshu].初期 += c.initial;
+    });
+    return Object.values(m).map(v=>({...v, 月額:Number(v.月額.toFixed(2)), 初期:Number(v.初期.toFixed(1))}));
   },[clients]);
 
   // 週別アポ数推移
@@ -493,21 +501,17 @@ function AnalyticsTab({clients, apoList}){
       if(!m) return;
       const d = new Date(yr, Number(m[1])-1, Number(m[2]));
       if(isNaN(d)) return;
-      // 週の月曜日にスナップ
-      const dow = d.getDay(); // 0=Sun
+      const dow = d.getDay();
       const offset = dow===0?-6:1-dow;
       const monday = new Date(d);
       monday.setDate(d.getDate()+offset);
       const key = `${monday.getMonth()+1}/${monday.getDate()}`;
       const sortKey = monday.getTime();
-      if(!buckets[key]) buckets[key] = {label:key, count:0, sortKey};
-      buckets[key].count += Number(a.count)||0;
+      if(!buckets[key]) buckets[key] = {week:key, アポ数:0, sortKey};
+      buckets[key].アポ数 += Number(a.count)||0;
     });
     return Object.values(buckets).sort((a,b)=>a.sortKey-b.sortKey);
   },[apoList]);
-
-  const totalClients = clients.length;
-  const maxWeekly = Math.max(1, ...weeklyApo.map(w=>w.count));
 
   const Section = ({title, children}) => (
     <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
@@ -516,65 +520,69 @@ function AnalyticsTab({clients, apoList}){
     </div>
   );
 
-  const HBar = ({label, value, max, color, suffix})=>{
-    const pct = max>0?(value/max)*100:0;
-    return(
-      <div style={{marginBottom:8}}>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-          <span style={{fontWeight:600,color:"#334155"}}>{label}</span>
-          <span style={{fontWeight:700,color}}>{value}{suffix}</span>
-        </div>
-        <div style={{background:"#f1f5f9",borderRadius:4,height:10,overflow:"hidden"}}>
-          <div style={{background:color,width:`${pct}%`,height:10,borderRadius:4,transition:"width .3s"}}/>
-        </div>
-      </div>
-    );
-  };
+  const Empty = ()=> <div style={{color:"#94a3b8",fontSize:12,padding:"20px 0",textAlign:"center"}}>データなし</div>;
+
+  const tooltipStyle = {fontSize:12, borderRadius:6, border:"1px solid #e2e8f0"};
 
   return(
     <div>
       <Section title="📊 契約クライアント 業種別内訳">
-        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:
-          gyoshuStats.map(([k,v])=>(
-            <HBar key={k} label={k} value={v} max={totalClients} color={GYOSHU_COL[k]||"#64748b"} suffix={`社 (${((v/totalClients)*100).toFixed(0)}%)`}/>
-          ))
-        }
+        {gyoshuData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={gyoshuData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({name,value,percent})=>`${name} ${value}社 (${(percent*100).toFixed(0)}%)`} labelLine={false} fontSize={11}>
+                {gyoshuData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}社`,"件数"]}/>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </Section>
 
       <Section title="📡 1次接触経路別内訳">
-        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:
-          contactStats.map(([k,v])=>(
-            <HBar key={k} label={k} value={v} max={totalClients} color={CONTACT_COL[k]||"#94a3b8"} suffix={`社 (${((v/totalClients)*100).toFixed(0)}%)`}/>
-          ))
-        }
+        {contactData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={contactData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={75} label={({name,value})=>`${name} ${value}`} labelLine={false} fontSize={11}>
+                {contactData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}社`,"件数"]}/>
+              <Legend wrapperStyle={{fontSize:11}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </Section>
 
-      <Section title="💰 業種別 月額合計">
-        {totalClients===0?<div style={{color:"#94a3b8",fontSize:12}}>データなし</div>:(()=>{
-          const max = Math.max(...gyoshuMonthly.map(([,v])=>v));
-          return gyoshuMonthly.map(([k,v])=>(
-            <HBar key={k} label={k} value={v.toFixed(1)} max={max} color={GYOSHU_COL[k]||"#64748b"} suffix="万"/>
-          ));
-        })()}
+      <Section title="💰 業種別 月額・初期費用">
+        {gyoshuRevenue.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={gyoshuRevenue} margin={{top:5,right:10,left:0,bottom:5}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+              <XAxis dataKey="name" fontSize={11}/>
+              <YAxis fontSize={11} unit="万"/>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>`${v}万`}/>
+              <Legend wrapperStyle={{fontSize:11}}/>
+              <Bar dataKey="月額" fill="#3b82f6" radius={[4,4,0,0]}/>
+              <Bar dataKey="初期" fill="#f59e0b" radius={[4,4,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </Section>
 
       <Section title="📅 週別アポ数 推移">
-        {weeklyApo.length===0?<div style={{color:"#94a3b8",fontSize:12}}>アポデータなし。月次KPIタブで入力してください。</div>:(
-          <div style={{display:"flex",alignItems:"flex-end",gap:8,height:160,padding:"0 4px",borderBottom:"1px solid #e2e8f0",overflowX:"auto"}}>
-            {weeklyApo.map(w=>{
-              const h = (w.count/maxWeekly)*130;
-              return(
-                <div key={w.label} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:42,flex:"0 0 auto"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:"#1e3a8a"}}>{w.count}</div>
-                  <div style={{width:28,height:h,background:"linear-gradient(180deg,#3b82f6,#1e3a8a)",borderRadius:"4px 4px 0 0"}}/>
-                  <div style={{fontSize:10,color:"#64748b",whiteSpace:"nowrap"}}>{w.label}〜</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {weeklyApo.length>0&&(
-          <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>※ 月曜始まりで集計</div>
+        {weeklyApo.length===0?<div style={{color:"#94a3b8",fontSize:12,padding:"20px 0",textAlign:"center"}}>アポデータなし。月次KPIタブで入力してください。</div>:(
+          <>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={weeklyApo} margin={{top:5,right:10,left:0,bottom:5}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                <XAxis dataKey="week" fontSize={11}/>
+                <YAxis fontSize={11} allowDecimals={false}/>
+                <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}本`,"アポ数"]}/>
+                <Line type="monotone" dataKey="アポ数" stroke="#1e3a8a" strokeWidth={2} dot={{fill:"#3b82f6",r:4}} activeDot={{r:6}}/>
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>※ 月曜始まりで集計</div>
+          </>
         )}
       </Section>
     </div>
