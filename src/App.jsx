@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line,
 } from "recharts";
+import { dbGet, dbSet, supabase } from "./supabase";
 
 const TC = {
   "失注": { bg:"#fee2e2", text:"#dc2626", border:"#fca5a5" },
@@ -721,8 +722,11 @@ function ClientsTab({clients}){
 }
 
 // ── アプリ本体 ─────────────────────────────────────
+const SYNC_KEYS = ["follow_cases","clients","monthly_cases","apo_list","kpi_targets"];
+
 export default function App(){
   const [tab,setTab]=useState("followup");
+  const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | error
   const [followCases,setFollowCases]=useState(()=>{
     const saved = lsGet("follow_cases");
     return saved ? JSON.parse(saved) : INIT_FOLLOW;
@@ -744,11 +748,41 @@ export default function App(){
     return saved ? {...INIT_KPI_TARGETS, ...JSON.parse(saved)} : INIT_KPI_TARGETS;
   });
 
-  useEffect(()=>{ lsSet("follow_cases", JSON.stringify(followCases)); },[followCases]);
-  useEffect(()=>{ lsSet("clients", JSON.stringify(clients)); },[clients]);
-  useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(monthlyCases)); },[monthlyCases]);
-  useEffect(()=>{ lsSet("apo_list", JSON.stringify(apoList)); },[apoList]);
-  useEffect(()=>{ lsSet("kpi_targets", JSON.stringify(kpiTargets)); },[kpiTargets]);
+  // 起動時にSupabaseから最新データを取得
+  const initialized = useRef(false);
+  useEffect(()=>{
+    if(initialized.current||!supabase) return;
+    initialized.current = true;
+    setSyncStatus("syncing");
+    Promise.all(SYNC_KEYS.map(k=>dbGet(k))).then(([fc,cl,mc,al,kt])=>{
+      if(fc) setFollowCases(fc);
+      if(cl) setClients(cl);
+      if(mc) setMonthlyCases(mc);
+      if(al) setApoList(al);
+      if(kt) setKpiTargets(p=>({...p,...kt}));
+      setSyncStatus("ok");
+    }).catch(()=>setSyncStatus("error"));
+  },[]);
+
+  // localStorage & Supabase への同期（debounce 1.5秒）
+  const syncTimer = useRef({});
+  const syncData = (key, value) => {
+    lsSet(key, JSON.stringify(value));
+    clearTimeout(syncTimer.current[key]);
+    syncTimer.current[key] = setTimeout(()=>{
+      setSyncStatus("syncing");
+      dbSet(key, value).then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("error"));
+    }, 1500);
+  };
+
+  useEffect(()=>{ syncData("follow_cases", followCases); },[followCases]);
+  useEffect(()=>{ syncData("clients", clients); },[clients]);
+  useEffect(()=>{ syncData("monthly_cases", monthlyCases); },[monthlyCases]);
+  useEffect(()=>{ syncData("apo_list", apoList); },[apoList]);
+  useEffect(()=>{ syncData("kpi_targets", kpiTargets); },[kpiTargets]);
+
+  const syncIcon = syncStatus==="syncing"?"⏳":syncStatus==="ok"?"☁️":syncStatus==="error"?"⚠️":supabase?"☁️":"💾";
+  const syncLabel = syncStatus==="syncing"?"同期中":syncStatus==="ok"?"同期済":syncStatus==="error"?"同期エラー":supabase?"":"ローカル";
 
   const tabs=[
     {k:"clients",  icon:"🏆", l:"契約"},
@@ -766,6 +800,7 @@ export default function App(){
         <div style={{textAlign:"right",fontSize:11,opacity:.8}}>
           <div>追客 {followCases.length}社</div>
           <div>契約 {clients.length}社</div>
+          <div style={{marginTop:2,fontSize:10,opacity:.7}}>{syncIcon} {syncLabel}</div>
         </div>
       </div>
       <div className="content-area">
