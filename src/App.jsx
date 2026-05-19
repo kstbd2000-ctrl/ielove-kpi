@@ -1,4 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
+} from "recharts";
+import { dbGet, dbSet, supabase } from "./supabase";
 
 const TC = {
   "失注": { bg:"#fee2e2", text:"#dc2626", border:"#fca5a5" },
@@ -65,6 +70,9 @@ const INIT_MONTHLY = [
   {id:203,date:"",tanto:"武",vtype:"V",asp:"",shogu:"",tsukin:"",co:"広田ユニオン",tier:"C",na:"",hojokin:false},
 ];
 const BLANK_FOLLOW = {tier:"D",co:"",s1:"",s2:"",loc:"",ph:"",type:"賃貸仲介",notes:"",contact:"",next:""};
+const BLANK_APO = {date:"",count:"",apoType:"賃貸"};
+const APO_TYPE_COL = {"賃貸":"#0ea5e9","売買":"#f97316","その他":"#94a3b8"};
+const INIT_KPI_TARGETS = {keiyaku:5, apo:20, shogu:200, tsukin:30};
 const lbl = {fontSize:10,color:"#64748b",marginBottom:3,fontWeight:600};
 const today = new Date().toISOString().slice(0,10).replace(/-/g,"/");
 
@@ -126,7 +134,7 @@ function ContractModal({followCase, onConfirm, onCancel}){
 }
 
 // ── 追客中カード ────────────────────────────────────
-function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange}){
+function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onDelete, onEdit}){
   const tc=TC[c.tier]||{bg:"#f1f5f9",text:"#475569",border:"#cbd5e1"};
   const tyc=TYPC[c.type]||"#64748b";
   const sys=[c.s1,c.s2].filter(Boolean);
@@ -156,9 +164,13 @@ function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange}){
         <div style={{borderTop:"1px solid #f1f5f9",padding:"12px 14px",background:"#fafafa"}}>
           {c.notes&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>📝 履歴メモ</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap",lineHeight:1.65,background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #e2e8f0"}}>{c.notes}</div></div>}
           {c.contact&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:3}}>👤 担当者情報</div><div style={{fontSize:12,color:"#334155",whiteSpace:"pre-wrap"}}>{c.contact}</div></div>}
-          <button onClick={onAI} disabled={aiLoad} style={{padding:"5px 12px",background:aiLoad?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#a78bfa)",color:aiLoad?"#94a3b8":"white",border:"none",borderRadius:6,cursor:aiLoad?"not-allowed":"pointer",fontSize:11,fontWeight:600}}>
-            {aiLoad?"⏳ 生成中...":"✨ AIネクストアクション提案"}
-          </button>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>onEdit(c)} style={{padding:"5px 12px",background:"#dbeafe",color:"#1d4ed8",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>✏️ 編集</button>
+            <button onClick={onAI} disabled={aiLoad} style={{padding:"5px 12px",background:aiLoad?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#a78bfa)",color:aiLoad?"#94a3b8":"white",border:"none",borderRadius:6,cursor:aiLoad?"not-allowed":"pointer",fontSize:11,fontWeight:600}}>
+              {aiLoad?"⏳ 生成中...":"✨ AIネクストアクション提案"}
+            </button>
+            <button onClick={()=>{if(window.confirm(`「${c.co}」を削除しますか？`))onDelete(c.id);}} style={{padding:"5px 12px",background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>🗑 削除</button>
+          </div>
           {aiRes&&<div style={{marginTop:8,background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:6,padding:"8px 12px",fontSize:12,color:"#5b21b6",lineHeight:1.6}}><span style={{fontWeight:700,fontSize:10,color:"#7c3aed"}}>🤖 AI提案：</span><br/>{aiRes}</div>}
         </div>
       )}
@@ -174,15 +186,32 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
   const [aiRes,setAiRes]=useState({});
   const [contractTarget,setContractTarget]=useState(null);
   const [showAddForm,setShowAddForm]=useState(false);
+  const [editFollowId,setEditFollowId]=useState(null);
   const [addForm,setAddForm]=useState(BLANK_FOLLOW);
   const af=(k,v)=>setAddForm(p=>({...p,[k]:v}));
   const ainp=(k,ph)=><input value={addForm[k]} onChange={e=>af(k,e.target.value)} placeholder={ph} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>;
   const aslc=(k,opts)=><select value={addForm[k]} onChange={e=>af(k,e.target.value)} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,background:"white",width:"100%"}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>;
   const saveFollow=()=>{
     if(!addForm.co.trim())return;
-    setFollowCases(p=>[{...addForm,id:Date.now()},...p]);
+    if(editFollowId!==null){
+      setFollowCases(p=>p.map(c=>c.id===editFollowId?{...addForm,id:editFollowId}:c));
+    }else{
+      setFollowCases(p=>[{...addForm,id:Date.now()},...p]);
+    }
     setAddForm(BLANK_FOLLOW);
     setShowAddForm(false);
+    setEditFollowId(null);
+  };
+  const startFollowEdit=(c)=>{
+    setAddForm({tier:c.tier,co:c.co,s1:c.s1||"",s2:c.s2||"",loc:c.loc||"",ph:c.ph||"",type:c.type,notes:c.notes||"",contact:c.contact||"",next:c.next||""});
+    setEditFollowId(c.id);
+    setShowAddForm(true);
+    if(typeof window!=="undefined") window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const cancelFollowForm=()=>{
+    setShowAddForm(false);
+    setAddForm(BLANK_FOLLOW);
+    setEditFollowId(null);
   };
 
   const cnt=TIERS_FOLLOW.reduce((a,t)=>({...a,[t]:followCases.filter(c=>c.tier===t).length}),{});
@@ -237,13 +266,13 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
       </div>
 
       <div style={{marginBottom:14}}>
-        <button onClick={()=>{setShowAddForm(s=>!s);setAddForm(BLANK_FOLLOW);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+        <button onClick={()=>{ if(showAddForm){cancelFollowForm();}else{setEditFollowId(null);setAddForm(BLANK_FOLLOW);setShowAddForm(true);} }} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
           {showAddForm?"✕ 閉じる":"＋ 追客案件を追加"}
         </button>
       </div>
       {showAddForm&&(
         <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:16,marginBottom:16}}>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>➕ 新規追客案件</div>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>{editFollowId!==null?"✏️ 追客案件を編集":"➕ 新規追客案件"}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:10}}>
             <div><div style={lbl}>Tier</div>{aslc("tier",["失注","A","B","C","D"])}</div>
             <div><div style={lbl}>種別</div>{aslc("type",["賃貸仲介","売買仲介","賃貸管理","総合不動産"])}</div>
@@ -257,8 +286,8 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
           <div style={{marginBottom:10}}><div style={lbl}>担当者情報</div><textarea value={addForm.contact} onChange={e=>af("contact",e.target.value)} placeholder="例: 田中社長 080-0000-0000" rows={2} style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,resize:"vertical",boxSizing:"border-box"}}/></div>
           <div style={{marginBottom:14}}><div style={lbl}>履歴メモ</div><textarea value={addForm.notes} onChange={e=>af("notes",e.target.value)} placeholder="商談メモ・状況など" rows={3} style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,resize:"vertical",boxSizing:"border-box"}}/></div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={saveFollow} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>✅ 追加</button>
-            <button onClick={()=>{setShowAddForm(false);setAddForm(BLANK_FOLLOW);}} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
+            <button onClick={saveFollow} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>{editFollowId!==null?"💾 更新":"✅ 追加"}</button>
+            <button onClick={cancelFollowForm} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
           </div>
         </div>
       )}
@@ -272,7 +301,7 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange}/>)}
+        {shown.map(c=><CaseCard key={c.id} c={c} expanded={exp===c.id} onToggle={()=>setExp(exp===c.id?null:c.id)} aiLoad={aiLoad[c.id]} aiRes={aiRes[c.id]} onAI={()=>genAI(c)} onTierChange={handleTierChange} onDelete={id=>setFollowCases(p=>p.filter(c=>c.id!==id))} onEdit={startFollowEdit}/>)}
         {shown.length===0&&<div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13}}>該当案件なし</div>}
       </div>
     </div>
@@ -280,19 +309,34 @@ function FollowupTab({followCases, setFollowCases, clients, setClients}){
 }
 
 // ── KPIカード ──────────────────────────────────────
-function KpiCard({label,unit,act,tgt}){
-  const noTarget=!tgt;
+function KpiCard({label,unit,act,tgt,onEditTgt}){
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState("");
+  const noTarget=tgt==null;
   const pct=noTarget?0:Math.min((act/tgt)*100,100);
   const col=noTarget?"#94a3b8":pct<20?"#ef4444":pct<50?"#f97316":"#22c55e";
+  const startEdit=()=>{setDraft(String(tgt??""));setEditing(true);};
+  const commit=()=>{
+    const v=parseFloat(draft);
+    if(!isNaN(v)&&v>0&&onEditTgt)onEditTgt(v);
+    setEditing(false);
+  };
   return(
     <div style={{background:"white",borderRadius:10,padding:14,border:"1px solid #e2e8f0",flex:1,minWidth:0}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
-        <span style={{fontWeight:700,fontSize:14}}>{label}</span>
-        <span style={{fontSize:11,color:"#94a3b8"}}>{noTarget?"目標未定":`目標 ${tgt}${unit}`}</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6,gap:6}}>
+        <span style={{fontWeight:700,fontSize:13}}>{label}</span>
+        {editing?(
+          <input autoFocus type="number" value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape")setEditing(false);}}
+            style={{width:60,padding:"2px 4px",fontSize:11,borderRadius:4,border:"1px solid #2563eb"}}/>
+        ):(
+          <span onClick={onEditTgt?startEdit:undefined} style={{fontSize:10,color:"#94a3b8",cursor:onEditTgt?"pointer":"default",whiteSpace:"nowrap"}}>
+            {noTarget?"目標未定":`目標 ${tgt}${unit}`}{onEditTgt&&" ✏️"}
+          </span>
+        )}
       </div>
-      <div style={{fontSize:22,fontWeight:700,marginBottom:4}}>
+      <div style={{fontSize:20,fontWeight:700,marginBottom:4,whiteSpace:"nowrap"}}>
         {typeof act==="number"&&!Number.isInteger(act)?act.toFixed(2):act}{unit}
-        {!noTarget&&<span style={{fontSize:12,color:"#64748b",fontWeight:400,marginLeft:4}}>/ {tgt}{unit}</span>}
+        {!noTarget&&<span style={{fontSize:11,color:"#64748b",fontWeight:400,marginLeft:4}}>/ {tgt}{unit}</span>}
       </div>
       <div style={{background:"#f1f5f9",borderRadius:4,height:7,marginBottom:6}}>
         {!noTarget&&<div style={{background:col,width:`${pct}%`,height:7,borderRadius:4}}/>}
@@ -303,21 +347,24 @@ function KpiCard({label,unit,act,tgt}){
 }
 
 // ── 月次案件タブ ───────────────────────────────────
-function MonthlyTab(){
-  const [cases,setCases]=useState(()=>{
-    const saved = lsGet("monthly_cases");
-    return saved ? JSON.parse(saved) : INIT_MONTHLY;
-  });
-  useEffect(()=>{ lsSet("monthly_cases", JSON.stringify(cases)); },[cases]);
-
+function MonthlyTab({cases, setCases, apoList, setApoList, kpiTargets, setKpiTargets}){
   const [form,setForm]=useState(BLANK_MONTHLY);
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
-  const KPI={keiyaku:5};
+  const [apoForm,setApoForm]=useState(BLANK_APO);
   const contractCnt=cases.filter(c=>c.tier==="契約").length;
-  const totalAsp=cases.reduce((s,c)=>s+(Number(c.asp)||0),0);
+  const totalApo=apoList.reduce((s,a)=>s+(Number(a.count)||0),0);
   const totalShogu=cases.reduce((s,c)=>s+(Number(c.shogu)||0),0);
   const totalTsukin=cases.reduce((s,c)=>s+(Number(c.tsukin)||0),0);
+  const setTgt=(k,v)=>setKpiTargets(p=>({...p,[k]:v}));
+  const [showApoForm,setShowApoForm]=useState(false);
+  const addApo=()=>{
+    if(!apoForm.count)return;
+    setApoList(p=>[{id:Date.now(),date:apoForm.date,count:Number(apoForm.count),apoType:apoForm.apoType},...p]);
+    setApoForm(BLANK_APO);
+    setShowApoForm(false);
+  };
+  const delApo=(id)=>setApoList(p=>p.filter(a=>a.id!==id));
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=()=>{
     if(!form.co.trim())return;
@@ -329,15 +376,70 @@ function MonthlyTab(){
   const del=(id)=>setCases(p=>p.filter(c=>c.id!==id));
   const inp=(k,ph)=><input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>;
   const slc=(k,opts)=><select value={form[k]} onChange={e=>f(k,e.target.value)} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,background:"white",width:"100%"}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>;
-  const tiers=["契約","A","B","C","D"];
+  const tiers=["契約","A","B","C","D","失注"];
   return(
     <div>
-      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        <KpiCard label="契約" unit="本" act={contractCnt} tgt={KPI.keiyaku}/>
-        <KpiCard label="ASP合計" unit="" act={totalAsp} tgt={null}/>
-        <KpiCard label="初顧合計" unit="" act={totalShogu} tgt={null}/>
-        <KpiCard label="月顧合計" unit="" act={totalTsukin} tgt={null}/>
+      <div className="kpi-row" style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <KpiCard label="契約" unit="本" act={contractCnt} tgt={kpiTargets.keiyaku} onEditTgt={v=>setTgt("keiyaku",v)}/>
+        <KpiCard label="アポ数" unit="本" act={totalApo} tgt={kpiTargets.apo} onEditTgt={v=>setTgt("apo",v)}/>
+        <KpiCard label="初期合計" unit="万" act={totalShogu} tgt={kpiTargets.shogu} onEditTgt={v=>setTgt("shogu",v)}/>
+        <KpiCard label="月額合計" unit="万" act={totalTsukin} tgt={kpiTargets.tsukin} onEditTgt={v=>setTgt("tsukin",v)}/>
       </div>
+
+      {/* アポイント入力 */}
+      <div style={{marginBottom:14}}>
+        <button onClick={()=>{setShowApoForm(s=>!s);setApoForm(BLANK_APO);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#0369a1,#0ea5e9)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+          {showApoForm?"✕ 閉じる":"＋ アポを追加"}
+        </button>
+      </div>
+      {showApoForm&&(
+        <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:16,marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>📅 アポイント入力</div>
+          <div style={{marginBottom:10}}>
+            <div style={lbl}>種別</div>
+            <div style={{display:"flex",gap:6}}>
+              {["賃貸","売買","その他"].map(t=>{
+                const active=apoForm.apoType===t;
+                const col=APO_TYPE_COL[t];
+                return <button key={t} onClick={()=>setApoForm(p=>({...p,apoType:t}))} style={{flex:1,padding:"7px 0",borderRadius:8,border:`2px solid ${active?col:"#e2e8f0"}`,background:active?col:"white",color:active?"white":"#64748b",fontWeight:active?700:400,fontSize:13,cursor:"pointer"}}>{t}</button>;
+              })}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div>
+              <div style={lbl}>日付</div>
+              <input value={apoForm.date} onChange={e=>setApoForm(p=>({...p,date:e.target.value}))} placeholder="例: 5/7" style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <div style={lbl}>本数</div>
+              <input type="number" value={apoForm.count} onChange={e=>setApoForm(p=>({...p,count:e.target.value}))} placeholder="例: 3" style={{padding:"5px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={addApo} style={{padding:"7px 20px",background:"linear-gradient(135deg,#166534,#22c55e)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>✅ 追加</button>
+            <button onClick={()=>{setShowApoForm(false);setApoForm(BLANK_APO);}} style={{padding:"7px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>キャンセル</button>
+          </div>
+        </div>
+      )}
+      {apoList.length>0&&(
+        <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:12,color:"#475569",marginBottom:8}}>📋 入力済みアポ（計 {totalApo}本）</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {apoList.map(a=>{
+              const col=APO_TYPE_COL[a.apoType||"その他"];
+              return(
+                <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,background:`${col}15`,border:`1px solid ${col}60`,borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
+                  <span style={{color:col,fontWeight:700,fontSize:10}}>{a.apoType||"その他"}</span>
+                  <span style={{color:"#334155",fontWeight:600}}>{a.date||"日付未定"}</span>
+                  <span style={{color:"#1e293b",fontWeight:700}}>{a.count}本</span>
+                  <button onClick={()=>delApo(a.id)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{marginBottom:14}}>
         <button onClick={()=>{setShowForm(s=>!s);setEditId(null);setForm(BLANK_MONTHLY);}} style={{padding:"7px 16px",background:"linear-gradient(135deg,#2563eb,#3b82f6)",color:"white",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
           {showForm&&editId===null?"✕ 閉じる":"＋ 案件を追加"}
@@ -373,7 +475,7 @@ function MonthlyTab(){
               <span style={{fontSize:12,color:tc.text,fontWeight:600}}>{rows.length}本{aspSum>0?` · ASP ${aspSum}`:""}</span>
             </div>
             {rows.length===0?<div style={{padding:"12px 14px",color:"#94a3b8",fontSize:12}}>案件なし</div>:
-            <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <div className="table-scroll-wrap"><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
               <thead><tr style={{background:"#f8fafc"}}>{["日付","担当","形式","ASP","初期","月額","会社名","ネクストアクション",""].map((h,i)=><th key={i} style={{padding:"5px 10px",textAlign:"left",color:"#64748b",fontWeight:600,borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
               <tbody>{rows.map((c,i)=>(
                 <tr key={c.id} style={{background:i%2===0?"white":"#fafafa"}}>
@@ -395,6 +497,156 @@ function MonthlyTab(){
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── 分析タブ ───────────────────────────────────────
+function AnalyticsTab({clients, apoList}){
+  // 業種別内訳
+  const gyoshuData = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{ m[c.gyoshu] = (m[c.gyoshu]||0)+1; });
+    return Object.entries(m).map(([name,value])=>({name,value,color:GYOSHU_COL[name]||"#64748b"})).sort((a,b)=>b.value-a.value);
+  },[clients]);
+
+  // 1次接触経路別内訳
+  const contactData = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{ m[c.contact1] = (m[c.contact1]||0)+1; });
+    return Object.entries(m).map(([name,value])=>({name,value,color:CONTACT_COL[name]||"#94a3b8"})).sort((a,b)=>b.value-a.value);
+  },[clients]);
+
+  // 業種 × 月額合計・初期合計
+  const gyoshuRevenue = useMemo(()=>{
+    const m = {};
+    clients.forEach(c=>{
+      if(!m[c.gyoshu]) m[c.gyoshu] = {name:c.gyoshu, 月額:0, 初期:0, color:GYOSHU_COL[c.gyoshu]||"#64748b"};
+      m[c.gyoshu].月額 += c.monthly;
+      m[c.gyoshu].初期 += c.initial;
+    });
+    return Object.values(m).map(v=>({...v, 月額:Number(v.月額.toFixed(2)), 初期:Number(v.初期.toFixed(1))}));
+  },[clients]);
+
+  // アポ種別内訳
+  const apoTypeData = useMemo(()=>{
+    const m = {};
+    apoList.forEach(a=>{
+      const t = a.apoType||"その他";
+      m[t] = (m[t]||0) + (Number(a.count)||0);
+    });
+    return Object.entries(m).map(([name,value])=>({name,value,color:APO_TYPE_COL[name]||"#94a3b8"})).sort((a,b)=>b.value-a.value);
+  },[apoList]);
+
+  // 週別アポ数推移
+  const weeklyApo = useMemo(()=>{
+    const yr = new Date().getFullYear();
+    const buckets = {};
+    apoList.forEach(a=>{
+      if(!a.date) return;
+      const m = String(a.date).match(/(\d{1,2})\D+(\d{1,2})/);
+      if(!m) return;
+      const d = new Date(yr, Number(m[1])-1, Number(m[2]));
+      if(isNaN(d)) return;
+      const dow = d.getDay();
+      const offset = dow===0?-6:1-dow;
+      const monday = new Date(d);
+      monday.setDate(d.getDate()+offset);
+      const key = `${monday.getMonth()+1}/${monday.getDate()}`;
+      const sortKey = monday.getTime();
+      if(!buckets[key]) buckets[key] = {week:key, アポ数:0, sortKey};
+      buckets[key].アポ数 += Number(a.count)||0;
+    });
+    return Object.values(buckets).sort((a,b)=>a.sortKey-b.sortKey);
+  },[apoList]);
+
+  const Section = ({title, children}) => (
+    <div style={{background:"white",border:"1px solid #e2e8f0",borderRadius:10,padding:14,marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#1e3a8a"}}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const Empty = ()=> <div style={{color:"#94a3b8",fontSize:12,padding:"20px 0",textAlign:"center"}}>データなし</div>;
+
+  const tooltipStyle = {fontSize:12, borderRadius:6, border:"1px solid #e2e8f0"};
+
+  return(
+    <div>
+      <Section title="📊 契約クライアント 業種別内訳">
+        {gyoshuData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={170}>
+            <PieChart>
+              <Pie data={gyoshuData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55}>
+                {gyoshuData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v,name)=>[`${v}社`,"件数"]} labelFormatter={name=>`${name}`}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}社`}/>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </Section>
+
+      <Section title="📡 1次接触経路別内訳">
+        {contactData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={contactData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={35} outerRadius={60}>
+                {contactData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}社`,"件数"]}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}社`}/>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </Section>
+
+      <Section title="💰 業種別 月額・初期費用">
+        {gyoshuRevenue.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={gyoshuRevenue} margin={{top:5,right:10,left:0,bottom:5}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+              <XAxis dataKey="name" fontSize={11}/>
+              <YAxis fontSize={11} unit="万"/>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>`${v}万`}/>
+              <Legend wrapperStyle={{fontSize:11}}/>
+              <Bar dataKey="月額" fill="#3b82f6" radius={[4,4,0,0]}/>
+              <Bar dataKey="初期" fill="#f59e0b" radius={[4,4,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </Section>
+
+      <Section title="🏠 アポイント 種別内訳">
+        {apoTypeData.length===0?<Empty/>:(
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={apoTypeData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={35} outerRadius={60}>
+                {apoTypeData.map((d,i)=><Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}本`,"本数"]}/>
+              <Legend wrapperStyle={{fontSize:11}} formatter={(value,entry)=>`${value} ${entry.payload.value}本`}/>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </Section>
+
+      <Section title="📅 週別アポ数 推移">
+        {weeklyApo.length===0?<div style={{color:"#94a3b8",fontSize:12,padding:"20px 0",textAlign:"center"}}>アポデータなし。月次KPIタブで入力してください。</div>:(
+          <>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={weeklyApo} margin={{top:5,right:10,left:0,bottom:5}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                <XAxis dataKey="week" fontSize={11}/>
+                <YAxis fontSize={11} allowDecimals={false}/>
+                <Tooltip contentStyle={tooltipStyle} formatter={(v)=>[`${v}本`,"アポ数"]}/>
+                <Line type="monotone" dataKey="アポ数" stroke="#1e3a8a" strokeWidth={2} dot={{fill:"#3b82f6",r:4}} activeDot={{r:6}}/>
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>※ 月曜始まりで集計</div>
+          </>
+        )}
+      </Section>
     </div>
   );
 }
@@ -436,19 +688,19 @@ function ClientsTab({clients}){
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>契約社数</div>
-          <div style={{fontSize:28,fontWeight:700}}>{filtered.length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
+          <div style={{fontSize:18,fontWeight:700,whiteSpace:"nowrap"}}>{filtered.length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#0369a1,#38bdf8)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>月額合計</div>
-          <div style={{fontSize:28,fontWeight:700}}>{totalMonthly.toFixed(2)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
+          <div style={{fontSize:18,fontWeight:700,whiteSpace:"nowrap"}}>{totalMonthly.toFixed(2)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#b45309,#fcd34d)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>初期費用合計</div>
-          <div style={{fontSize:28,fontWeight:700}}>{totalInitial.toFixed(1)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
+          <div style={{fontSize:18,fontWeight:700,whiteSpace:"nowrap"}}>{totalInitial.toFixed(1)}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>万</span></div>
         </div>
         <div style={{background:"linear-gradient(135deg,#166534,#4ade80)",color:"white",borderRadius:10,padding:14,flex:1,minWidth:110}}>
           <div style={{fontSize:11,opacity:.8,marginBottom:4}}>補助金あり</div>
-          <div style={{fontSize:28,fontWeight:700}}>{filtered.filter(c=>c.hojokin).length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
+          <div style={{fontSize:18,fontWeight:700,whiteSpace:"nowrap"}}>{filtered.filter(c=>c.hojokin).length}<span style={{fontSize:12,fontWeight:400,marginLeft:4}}>社</span></div>
         </div>
       </div>
 
@@ -530,8 +782,11 @@ function ClientsTab({clients}){
 }
 
 // ── アプリ本体 ─────────────────────────────────────
+const SYNC_KEYS = ["follow_cases","clients","monthly_cases","apo_list","kpi_targets"];
+
 export default function App(){
   const [tab,setTab]=useState("followup");
+  const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | error
   const [followCases,setFollowCases]=useState(()=>{
     const saved = lsGet("follow_cases");
     return saved ? JSON.parse(saved) : INIT_FOLLOW;
@@ -540,31 +795,89 @@ export default function App(){
     const saved = lsGet("clients");
     return saved ? JSON.parse(saved) : INIT_CLIENTS;
   });
+  const [monthlyCases,setMonthlyCases]=useState(()=>{
+    const saved = lsGet("monthly_cases");
+    return saved ? JSON.parse(saved) : INIT_MONTHLY;
+  });
+  const [apoList,setApoList]=useState(()=>{
+    const saved = lsGet("apo_list");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [kpiTargets,setKpiTargets]=useState(()=>{
+    const saved = lsGet("kpi_targets");
+    return saved ? {...INIT_KPI_TARGETS, ...JSON.parse(saved)} : INIT_KPI_TARGETS;
+  });
 
-  useEffect(()=>{ lsSet("follow_cases", JSON.stringify(followCases)); },[followCases]);
-  useEffect(()=>{ lsSet("clients", JSON.stringify(clients)); },[clients]);
+  // 起動時にSupabaseから最新データを取得
+  const initialized = useRef(false);
+  useEffect(()=>{
+    if(initialized.current||!supabase) return;
+    initialized.current = true;
+    setSyncStatus("syncing");
+    Promise.all(SYNC_KEYS.map(k=>dbGet(k))).then(([fc,cl,mc,al,kt])=>{
+      if(fc) setFollowCases(fc);
+      if(cl) setClients(cl);
+      if(mc) setMonthlyCases(mc);
+      if(al) setApoList(al);
+      if(kt) setKpiTargets(p=>({...p,...kt}));
+      setSyncStatus("ok");
+    }).catch(()=>setSyncStatus("error"));
+  },[]);
 
-  const tabs=[{k:"clients",l:"🏆 契約クライアント"},{k:"followup",l:"📋 追客中案件"},{k:"monthly",l:"📈 月次案件 & KPI"}];
+  // localStorage & Supabase への同期（debounce 1.5秒）
+  const syncTimer = useRef({});
+  const syncData = (key, value) => {
+    lsSet(key, JSON.stringify(value));
+    clearTimeout(syncTimer.current[key]);
+    syncTimer.current[key] = setTimeout(()=>{
+      setSyncStatus("syncing");
+      dbSet(key, value).then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("error"));
+    }, 1500);
+  };
+
+  useEffect(()=>{ syncData("follow_cases", followCases); },[followCases]);
+  useEffect(()=>{ syncData("clients", clients); },[clients]);
+  useEffect(()=>{ syncData("monthly_cases", monthlyCases); },[monthlyCases]);
+  useEffect(()=>{ syncData("apo_list", apoList); },[apoList]);
+  useEffect(()=>{ syncData("kpi_targets", kpiTargets); },[kpiTargets]);
+
+  const syncIcon = syncStatus==="syncing"?"⏳":syncStatus==="ok"?"☁️":syncStatus==="error"?"⚠️":supabase?"☁️":"💾";
+  const syncLabel = syncStatus==="syncing"?"同期中":syncStatus==="ok"?"同期済":syncStatus==="error"?"同期エラー":supabase?"":"ローカル";
+
+  const tabs=[
+    {k:"clients",  icon:"🏆", l:"契約"},
+    {k:"followup", icon:"📋", l:"追客中"},
+    {k:"monthly",  icon:"📈", l:"月次KPI"},
+    {k:"analytics",icon:"📊", l:"分析"},
+  ];
   return(
     <div style={{fontFamily:"'Segoe UI',sans-serif",background:"#f1f5f9",minHeight:"100vh"}}>
-      <div style={{background:"linear-gradient(135deg,#1e3a8a,#2563eb)",color:"white",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div className="app-header" style={{background:"linear-gradient(135deg,#1e3a8a,#2563eb)",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontWeight:700,fontSize:16}}>🏢 いえらぶ案件管理</div>
           <div style={{fontSize:11,opacity:.75}}>いえらぶGROUP · 営業1課 · 2026年5月</div>
         </div>
         <div style={{textAlign:"right",fontSize:11,opacity:.8}}>
           <div>追客 {followCases.length}社</div>
-          <div>契約クライアント {clients.length}社</div>
+          <div>契約 {clients.length}社</div>
+          <div style={{marginTop:2,fontSize:10,opacity:.7}}>{syncIcon} {syncLabel}</div>
         </div>
       </div>
-      <div style={{display:"flex",background:"white",borderBottom:"1px solid #e2e8f0",paddingLeft:16,overflowX:"auto"}}>
-        {tabs.map(t=><button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontWeight:tab===t.k?700:400,fontSize:12,color:tab===t.k?"#2563eb":"#64748b",borderBottom:`2px solid ${tab===t.k?"#2563eb":"transparent"}`,marginBottom:-1,whiteSpace:"nowrap"}}>{t.l}</button>)}
-      </div>
-      <div style={{padding:14,maxWidth:1100,margin:"0 auto"}}>
+      <div className="content-area">
         {tab==="followup"&&<FollowupTab followCases={followCases} setFollowCases={setFollowCases} clients={clients} setClients={setClients}/>}
-        {tab==="monthly"&&<MonthlyTab/>}
+        {tab==="monthly"&&<MonthlyTab cases={monthlyCases} setCases={setMonthlyCases} apoList={apoList} setApoList={setApoList} kpiTargets={kpiTargets} setKpiTargets={setKpiTargets}/>}
         {tab==="clients"&&<ClientsTab clients={clients}/>}
+        {tab==="analytics"&&<AnalyticsTab clients={clients} apoList={apoList}/>}
       </div>
+      <nav className="bottom-nav">
+        {tabs.map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)}>
+            <span className="nav-icon">{t.icon}</span>
+            <span className="nav-label" style={{color:tab===t.k?"#2563eb":"#94a3b8",fontWeight:tab===t.k?700:400}}>{t.l}</span>
+            {tab===t.k&&<span style={{width:20,height:2,background:"#2563eb",borderRadius:1}}/>}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
