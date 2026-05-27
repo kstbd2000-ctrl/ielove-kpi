@@ -143,7 +143,7 @@ function CaseCard({c, expanded, onToggle, aiLoad, aiRes, onAI, onTierChange, onD
       <div style={{padding:"11px 14px",display:"flex",alignItems:"flex-start",gap:10}}>
         <select value={c.tier} onChange={e=>onTierChange(c.id, e.target.value)}
           style={{padding:"2px 4px",borderRadius:5,border:`1px solid ${tc.border}`,background:tc.bg,color:tc.text,fontWeight:700,fontSize:11,cursor:"pointer",minWidth:52}}>
-          {TIERS_FOLLOW.map(t=><option key={t} value={t}>{t}</option>)}
+          {[...TIERS_FOLLOW,"契約"].map(t=><option key={t} value={t}>{t}</option>)}
         </select>
 
         <div onClick={onToggle} style={{flex:1,minWidth:0,cursor:"pointer"}}>
